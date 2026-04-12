@@ -196,6 +196,23 @@ MESH_ALPHA=0.9 \
 bash run_visualize.sh
 ```
 
+For easier visual inspection, generate one image per plane with original
+surface samples in black and reflected samples in the plane color:
+
+```bash
+DATAROOT=datasets/shapenet \
+EXP_NAME=airplane_101train_22test \
+RESULTS_DIR=results \
+MAX_FILES=22 \
+RENDER_MODE=points \
+SPLIT_PLANES=1 \
+SHOW_REFLECTION=1 \
+PLANE_SCALE=0.25 \
+PLANE_ALPHA=0.12 \
+ZOOM=1.05 \
+bash run_visualize.sh
+```
+
 Run a controlled tiny subset:
 
 ```bash

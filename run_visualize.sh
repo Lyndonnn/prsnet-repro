@@ -15,6 +15,10 @@ PLANE_ALPHA="${PLANE_ALPHA:-0.18}"
 MESH_ALPHA="${MESH_ALPHA:-0.9}"
 MESH_EDGES="${MESH_EDGES:-0}"
 ZOOM="${ZOOM:-1.15}"
+RENDER_MODE="${RENDER_MODE:-points}"
+SPLIT_PLANES="${SPLIT_PLANES:-0}"
+SHOW_REFLECTION="${SHOW_REFLECTION:-0}"
+MAX_POINTS="${MAX_POINTS:-1000}"
 export MPLCONFIGDIR="${MPLCONFIGDIR:-/tmp/matplotlib}"
 
 args=(
@@ -30,6 +34,8 @@ args=(
   --plane-alpha "$PLANE_ALPHA"
   --mesh-alpha "$MESH_ALPHA"
   --zoom "$ZOOM"
+  --render-mode "$RENDER_MODE"
+  --max-points "$MAX_POINTS"
 )
 
 if [[ -n "$OUTPUT_DIR" ]]; then
@@ -38,6 +44,14 @@ fi
 
 if [[ "$MESH_EDGES" == "1" || "$MESH_EDGES" == "true" ]]; then
   args+=(--mesh-edges)
+fi
+
+if [[ "$SPLIT_PLANES" == "1" || "$SPLIT_PLANES" == "true" ]]; then
+  args+=(--split-planes)
+fi
+
+if [[ "$SHOW_REFLECTION" == "1" || "$SHOW_REFLECTION" == "true" ]]; then
+  args+=(--show-reflection)
 fi
 
 echo "[run_visualize] ${args[*]} $*"

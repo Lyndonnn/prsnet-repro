@@ -44,6 +44,36 @@ def load_planes(prediction):
     return planes
 
 
+def load_sample_points(source, prediction, max_points):
+    if "surfaceSamples" in source:
+        points = np.asarray(source["surfaceSamples"], dtype=np.float64)
+        if points.shape[0] == 3:
+            points = points.T
+    elif "sample" in prediction:
+        points = np.asarray(prediction["sample"], dtype=np.float64)
+        if points.shape[0] == 3:
+            points = points.T
+    else:
+        return None
+
+    if points.ndim != 2 or points.shape[1] != 3:
+        return None
+    if max_points and len(points) > max_points:
+        rng = np.random.default_rng(1)
+        points = points[rng.choice(len(points), size=max_points, replace=False)]
+    return points
+
+
+def reflect_points(points, plane):
+    normal = plane[:3].astype(np.float64)
+    d = float(plane[3])
+    normal_norm = np.linalg.norm(normal)
+    normal = normal / normal_norm
+    d = d / normal_norm
+    signed_dist = np.sum(points * normal[None, :], axis=1) + d
+    return points - 2.0 * signed_dist[:, None] * normal[None, :]
+
+
 def plane_grid(plane, vertices, scale):
     normal = plane[:3].astype(np.float64)
     d = float(plane[3])
@@ -80,9 +110,43 @@ def set_axes_equal(ax, vertices, zoom):
     ax.set_box_aspect([1, 1, 1])
 
 
+def style_axis(ax, vertices, zoom, title):
+    ax.set_title(title)
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
+    ax.set_zlabel("z")
+    set_axes_equal(ax, vertices, zoom)
+    ax.view_init(elev=22, azim=38)
+    ax.grid(False)
+
+
+def draw_mesh(ax, vertices, faces, mesh_alpha, mesh_edges):
+    mesh = Poly3DCollection(vertices[faces], alpha=mesh_alpha, linewidths=0.05 if mesh_edges else 0.0)
+    mesh.set_facecolor("#8f8f8f")
+    mesh.set_edgecolor("#4d4d4d" if mesh_edges else "#8f8f8f")
+    ax.add_collection3d(mesh)
+
+
+def draw_points(ax, points, color="#2f2f2f", alpha=0.75, size=4, label=None):
+    ax.scatter(points[:, 0], points[:, 1], points[:, 2], s=size, c=color, alpha=alpha, depthshade=False, label=label)
+
+
+def draw_plane(ax, plane, vertices, color, plane_scale, plane_alpha, label):
+    xs, ys, zs = plane_grid(plane, vertices, plane_scale)
+    ax.plot_surface(xs, ys, zs, color=color, alpha=plane_alpha, linewidth=0, shade=False)
+    normal = plane[:3] / np.linalg.norm(plane[:3])
+    d = plane[3] / np.linalg.norm(plane[:3])
+    center = -d * normal
+    extent = np.ptp(vertices, axis=0).max()
+    ax.quiver(center[0], center[1], center[2], normal[0], normal[1], normal[2],
+              length=max(float(extent) * 0.18, 0.08), color=color, normalize=True)
+    ax.text(center[0], center[1], center[2], label, color=color)
+
+
 def visualize_one(input_mat, prediction_mat, output_png, max_faces=5000, dpi=180,
                   plane_scale=0.35, plane_alpha=0.18, mesh_alpha=0.9,
-                  mesh_edges=False, zoom=1.15):
+                  mesh_edges=False, zoom=1.15, render_mode="points",
+                  split_planes=False, show_reflection=False, max_points=1000):
     source = load_mat(input_mat)
     prediction = load_mat(prediction_mat)
 
@@ -100,38 +164,47 @@ def visualize_one(input_mat, prediction_mat, output_png, max_faces=5000, dpi=180
     if not planes:
         raise ValueError("%s has no plane0/plane1/... prediction keys" % prediction_mat)
 
+    sample_points = load_sample_points(source, prediction, max_points)
+
     fig = plt.figure(figsize=(8, 8))
     ax = fig.add_subplot(111, projection="3d")
 
-    mesh = Poly3DCollection(vertices[faces], alpha=mesh_alpha, linewidths=0.05 if mesh_edges else 0.0)
-    mesh.set_facecolor("#8f8f8f")
-    mesh.set_edgecolor("#4d4d4d" if mesh_edges else "#8f8f8f")
-    ax.add_collection3d(mesh)
+    if render_mode in ("mesh", "both"):
+        draw_mesh(ax, vertices, faces, mesh_alpha, mesh_edges)
+    if render_mode in ("points", "both") and sample_points is not None:
+        draw_points(ax, sample_points, color="#202020", alpha=0.7, size=5, label="surface samples")
 
     for idx, (key, plane) in enumerate(planes):
-        xs, ys, zs = plane_grid(plane, vertices, plane_scale)
         color = PLANE_COLORS[idx % len(PLANE_COLORS)]
-        ax.plot_surface(xs, ys, zs, color=color, alpha=plane_alpha, linewidth=0, shade=False)
-        normal = plane[:3] / np.linalg.norm(plane[:3])
-        d = plane[3] / np.linalg.norm(plane[:3])
-        center = -d * normal
-        extent = np.ptp(vertices, axis=0).max()
-        ax.quiver(center[0], center[1], center[2], normal[0], normal[1], normal[2],
-                  length=max(float(extent) * 0.18, 0.08), color=color, normalize=True)
-        ax.text(center[0], center[1], center[2], key, color=color)
+        draw_plane(ax, plane, vertices, color, plane_scale, plane_alpha, key)
 
-    ax.set_title("%s\n%s" % (Path(input_mat).name, Path(prediction_mat).name))
-    ax.set_xlabel("x")
-    ax.set_ylabel("y")
-    ax.set_zlabel("z")
-    set_axes_equal(ax, vertices, zoom)
-    ax.view_init(elev=22, azim=38)
-    ax.grid(False)
+    style_axis(ax, vertices, zoom, "%s\n%s" % (Path(input_mat).name, Path(prediction_mat).name))
     output_png.parent.mkdir(parents=True, exist_ok=True)
     fig.tight_layout()
     fig.savefig(output_png, dpi=dpi)
     plt.close(fig)
     print("[visualize_predictions] wrote %s" % output_png)
+
+    if split_planes:
+        for idx, (key, plane) in enumerate(planes):
+            color = PLANE_COLORS[idx % len(PLANE_COLORS)]
+            split_png = output_png.with_name("%s_%s.png" % (output_png.stem, key))
+            fig = plt.figure(figsize=(8, 8))
+            ax = fig.add_subplot(111, projection="3d")
+            if render_mode in ("mesh", "both"):
+                draw_mesh(ax, vertices, faces, mesh_alpha, mesh_edges)
+            if sample_points is not None:
+                draw_points(ax, sample_points, color="#222222", alpha=0.65, size=5, label="original")
+                if show_reflection:
+                    reflected = reflect_points(sample_points, plane)
+                    draw_points(ax, reflected, color=color, alpha=0.45, size=5, label="reflected")
+                    ax.legend(loc="upper right")
+            draw_plane(ax, plane, vertices, color, plane_scale, min(plane_alpha + 0.08, 0.35), key)
+            style_axis(ax, vertices, zoom, "%s %s" % (Path(input_mat).stem, key))
+            fig.tight_layout()
+            fig.savefig(split_png, dpi=dpi)
+            plt.close(fig)
+            print("[visualize_predictions] wrote %s" % split_png)
 
 
 def iter_prediction_files(results_dir, exp_name, phase, which_epoch):
@@ -160,6 +233,12 @@ def main():
     parser.add_argument("--mesh-alpha", type=float, default=0.9, help="Mesh opacity.")
     parser.add_argument("--mesh-edges", action="store_true", help="Draw mesh triangle edges.")
     parser.add_argument("--zoom", type=float, default=1.15, help="Axis range multiplier around the object.")
+    parser.add_argument("--render-mode", choices=["points", "mesh", "both"], default="points",
+                        help="Draw surface sample points, mesh triangles, or both.")
+    parser.add_argument("--split-planes", action="store_true", help="Also write one image per predicted plane.")
+    parser.add_argument("--show-reflection", action="store_true",
+                        help="In split-plane images, draw reflected surface samples for visual symmetry checking.")
+    parser.add_argument("--max-points", type=int, default=1000, help="Surface sample points to draw. 0 means all.")
     args = parser.parse_args()
 
     if args.input_mat or args.prediction_mat or args.output:
@@ -167,7 +246,8 @@ def main():
             raise SystemExit("--input-mat, --prediction-mat, and --output must be provided together")
         visualize_one(Path(args.input_mat), Path(args.prediction_mat), Path(args.output),
                       args.max_faces, args.dpi, args.plane_scale, args.plane_alpha,
-                      args.mesh_alpha, args.mesh_edges, args.zoom)
+                      args.mesh_alpha, args.mesh_edges, args.zoom, args.render_mode,
+                      args.split_planes, args.show_reflection, args.max_points)
         return
 
     prediction_dir, prediction_files = iter_prediction_files(args.results_dir, args.exp_name, args.phase, args.which_epoch)
@@ -185,7 +265,8 @@ def main():
         output_png = output_dir / ("%s_planes.png" % prediction_mat.stem)
         visualize_one(input_mat, prediction_mat, output_png,
                       args.max_faces, args.dpi, args.plane_scale, args.plane_alpha,
-                      args.mesh_alpha, args.mesh_edges, args.zoom)
+                      args.mesh_alpha, args.mesh_edges, args.zoom, args.render_mode,
+                      args.split_planes, args.show_reflection, args.max_points)
 
     print("[visualize_predictions] visualized %d prediction files" % len(prediction_files))
 
