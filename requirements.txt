@@ -5,6 +5,7 @@ numpy<2
 scipy>=1.6
 torchsummary==1.5.1
 tensorboard>=2.4
+matplotlib>=3.5
 
 # Optional only if you pass --tf_log to train.py:
 # tensorflow>=2.4

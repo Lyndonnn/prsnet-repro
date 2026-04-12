@@ -183,6 +183,16 @@ Run inference:
 bash run_test.sh
 ```
 
+Visualize predicted planes:
+
+```bash
+DATAROOT=datasets/shapenet \
+EXP_NAME=airplane_101train_22test \
+RESULTS_DIR=results \
+MAX_FILES=22 \
+bash run_visualize.sh
+```
+
 Run a controlled tiny subset:
 
 ```bash
@@ -237,6 +247,12 @@ Smoke inference writes:
 ```text
 results/prsnet_smoke/test_latest/<shape_id>.mat
 results/prsnet_smoke/test_latest/example_prediction.json
+```
+
+Visualization writes:
+
+```text
+results/<exp_name>/test_latest/visualizations/<shape_id>_planes.png
 ```
 
 ## Probable Failure Points, Ranked
