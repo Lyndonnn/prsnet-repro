@@ -22,7 +22,8 @@ def init_weights(net, gain=0.02):
 
 def init_net(net, init_gain=0.02, gpu_ids=[]):
     if len(gpu_ids) > 0:
-        assert(torch.cuda.is_available())
+        if not torch.cuda.is_available():
+            raise RuntimeError('CUDA was requested with gpu_ids=%s, but torch.cuda.is_available() is false.' % gpu_ids)
         net.cuda(gpu_ids[0])
         net = torch.nn.DataParallel(net, gpu_ids)
     else:
@@ -33,9 +34,9 @@ def init_net(net, init_gain=0.02, gpu_ids=[]):
 
 def define_PRSNet(input_nc, output_nc, conv_layers, num_plane, num_quat, biasTerms, useBn, activation, init_gain=0.02, gpu_ids=[]):
     if activation=='relu':
-        ac_fun = nn.relu()
+        ac_fun = nn.ReLU(True)
     elif activation=='tanh':
-        ac_fun = nn.tanh()
+        ac_fun = nn.Tanh()
     elif activation=='lrelu':
         ac_fun = nn.LeakyReLU(0.2, True)
     if useBn:
@@ -43,7 +44,7 @@ def define_PRSNet(input_nc, output_nc, conv_layers, num_plane, num_quat, biasTer
         
     net = PRSNet(input_nc, output_nc, conv_layers, num_plane, num_quat, biasTerms, useBn, ac_fun)
     return init_net(net, init_gain, gpu_ids)
-    
+
 class PRSNet(nn.Module):
     def __init__(self, input_nc, output_nc, conv_layers, num_plane, num_quat, biasTerms, useBn = False, activation = nn.LeakyReLU(0.2, True)):
         super(PRSNet, self).__init__()
@@ -112,23 +113,29 @@ def normalize(x, enddim=4):
 class RegularLoss(nn.Module):
     def __init__(self):
         super(RegularLoss, self).__init__()
-        self.eye = torch.eye(3).cuda()
     def __call__(self, plane=None,quat=None, weight = 1):
 
-        reg_rot = torch.Tensor([0]).cuda()
-        reg_plane = torch.Tensor([0]).cuda()
+        if plane:
+            device = plane[0].device
+        elif quat:
+            device = quat[0].device
+        else:
+            device = torch.device('cpu')
+        eye = torch.eye(3, device=device)
+        reg_rot = torch.zeros(1, device=device)
+        reg_plane = torch.zeros(1, device=device)
         if plane:
             p = [normalize(i[:,0:3]).unsqueeze(2) for i in plane]
             
             x = torch.cat(p,2)
             
             y = torch.transpose(x,1,2)
-            reg_plane = (torch.matmul(x,y) - self.eye).pow(2).sum(2).sum(1).mean() * weight
+            reg_plane = (torch.matmul(x,y) - eye).pow(2).sum(2).sum(1).mean() * weight
         if quat:
             q = [i[:,1:4].unsqueeze(2) for i in quat]
             x = torch.cat(q,2)
             y = torch.transpose(x,1,2)
-            reg_rot = (torch.matmul(x,y) - self.eye).pow(2).sum(2).sum(1).mean() * weight
+            reg_rot = (torch.matmul(x,y) - eye).pow(2).sum(2).sum(1).mean() * weight
         return reg_plane, reg_rot
 
 class symLoss(nn.Module):
@@ -138,14 +145,14 @@ class symLoss(nn.Module):
         self.gridBound = gridBound
         self.cal_distance = calDistence.apply
     def __call__(self, points, cp, voxel, plane = None, quat = None, weight = 1):
-        ref_loss = torch.Tensor([0]).cuda()
-        rot_loss = torch.Tensor([0]).cuda()
+        ref_loss = torch.zeros(1, device=points.device)
+        rot_loss = torch.zeros(1, device=points.device)
         for p in plane:
             ref_points = planesymTransform(points, p)
-            ref_loss += self.cal_distance(ref_points, cp, voxel, self.gridSize)
+            ref_loss += self.cal_distance(ref_points, cp, voxel, self.gridSize, weight)
         for q in quat:
             rot_points = rotsymTransform(points, q)
-            rot_loss += self.cal_distance(rot_points, cp, voxel, self.gridSize)
+            rot_loss += self.cal_distance(rot_points, cp, voxel, self.gridSize, weight)
         return ref_loss, rot_loss
 
 
@@ -159,8 +166,9 @@ def pointClosestCellIndex(points, gridBound = 0.5, gridSize = 32):
 class calDistence(torch.autograd.Function):
     @staticmethod
     def forward(ctx, trans_points, cp, voxel, gridSize, weight=1):
-        nb = pointClosestCellIndex(trans_points)
-        idx = torch.matmul(nb,torch.cuda.FloatTensor([gridSize**2, gridSize, 1])).long()
+        nb = pointClosestCellIndex(trans_points, gridSize=gridSize)
+        idx_weights = trans_points.new_tensor([gridSize**2, gridSize, 1])
+        idx = torch.matmul(nb, idx_weights).long()
         mask = 1 - torch.gather(voxel.view(-1,gridSize**3),1,idx)
         idx = idx.unsqueeze(2)
         idx = idx.repeat(1,1,3)
@@ -178,4 +186,3 @@ class calDistence(torch.autograd.Function):
         distance = distance[0]
         grad_trans_points = 2 * (distance) * ctx.constant /(distance.shape[0])
         return grad_trans_points, None, None, None, None
-    

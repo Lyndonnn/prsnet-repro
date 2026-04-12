@@ -1,0 +1,18 @@
+name: prsnet-repro
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  # Historical environment closest to the official README.
+  - python=3.8
+  - pytorch=1.7.1
+  - cudatoolkit=10.2
+  - "numpy<2"
+  - scipy=1.6.0
+  - pip
+  - pip:
+      - torchsummary==1.5.1
+      - tensorboard==2.4.1
+      # Optional for --tf_log, omitted from the default smoke path:
+      # - tensorflow==2.4.1

@@ -5,7 +5,10 @@ import os
 import ntpath
 import time
 from . import util
-import scipy.misc
+try:
+    import scipy.misc
+except ImportError:
+    scipy_misc = None
 try:
     from StringIO import StringIO  # Python 2.7
 except ImportError:

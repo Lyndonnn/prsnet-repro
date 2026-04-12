@@ -13,6 +13,7 @@ class BaseModel(torch.nn.Module):
         self.gpu_ids = opt.gpu_ids
         self.isTrain = opt.isTrain
         self.Tensor = torch.cuda.FloatTensor if self.gpu_ids else torch.Tensor
+        self.device = torch.device('cuda:%d' % self.gpu_ids[0]) if self.gpu_ids else torch.device('cpu')
         self.save_dir = os.path.join(opt.checkpoints_dir, opt.name)
 
     def set_input(self, input):
@@ -55,12 +56,16 @@ class BaseModel(torch.nn.Module):
             save_dir = self.save_dir
         save_path = os.path.join(save_dir, save_filename)        
         if not os.path.isfile(save_path):
-            print('%s not exists yet!' % save_path)
+            raise FileNotFoundError(
+                '[BaseModel] Checkpoint not found: %s\n'
+                'Train first, copy checkpoints into this repo, or choose another --which_epoch/--checkpoints_dir.' %
+                save_path
+            )
         else:
+            pretrained_dict = torch.load(save_path, map_location='cpu')
             try:
-                network.load_state_dict(torch.load(save_path))
-            except:   
-                pretrained_dict = torch.load(save_path)                
+                network.load_state_dict(pretrained_dict)
+            except Exception:
                 model_dict = network.state_dict()
                 try:
                     pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict}                    

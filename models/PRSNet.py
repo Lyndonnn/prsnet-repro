@@ -1,6 +1,7 @@
 from .base_model import BaseModel
 from .network import *
 import numpy as np
+import torch
 from torch.autograd import Variable
 class PRSNet(BaseModel):
     def name(self):
@@ -43,9 +44,10 @@ class PRSNet(BaseModel):
 
     def forward(self, voxel, points, cp):
 
-        voxel = Variable(voxel.data.cuda(), requires_grad=True)
-        points = Variable(points.data.cuda())
-        cp = Variable(cp.data.cuda())
+        device = torch.device('cuda:%d' % self.gpu_ids[0]) if len(self.gpu_ids) > 0 else torch.device('cpu')
+        voxel = Variable(voxel.to(device), requires_grad=True)
+        points = Variable(points.to(device))
+        cp = Variable(cp.to(device))
         quat, plane = self.netPRS(voxel)
         loss_ref, loss_rot = self.sym_loss(points, cp, voxel, plane = plane, quat = quat)
         loss_reg_plane, loss_reg_rot = self.reg_loss(plane = plane, quat = quat, weight=self.opt.weight)
@@ -53,10 +55,11 @@ class PRSNet(BaseModel):
         return [loss_ref, loss_rot,loss_reg_plane, loss_reg_rot]
 
     def inference(self, voxel):
+        device = torch.device('cuda:%d' % self.gpu_ids[0]) if len(self.gpu_ids) > 0 else torch.device('cpu')
         if len(self.gpu_ids) > 0:
-            voxel = Variable(voxel.data.cuda())
+            voxel = Variable(voxel.to(device))
         else:
-            voxel = Variable(voxel.data)
+            voxel = Variable(voxel.to(device))
         self.netPRS.eval()
         with torch.no_grad():
             quat, plane = self.netPRS(voxel)

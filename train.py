@@ -6,11 +6,15 @@ import numpy as np
 import torch
 import os
 import time
-from torchsummary import summary
+try:
+    from torchsummary import summary
+except ImportError:
+    summary = None
 
 
 torch.manual_seed(1)
-torch.cuda.manual_seed(1)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed_all(1)
 np.random.seed(1)
 opt = TrainOptions().parse()
 
@@ -29,7 +33,12 @@ print(PRSNet)
 data_loader = CreateDataLoader(opt)
 dataset = data_loader.load_data()
 dataset_size = len(data_loader)
-print('#training images = %d' % dataset_size)
+print('#training examples loaded = %d' % dataset_size)
+if dataset_size == 0:
+    raise RuntimeError(
+        'No training examples were loaded. Check that %s/train exists and contains preprocessed .mat files.' %
+        opt.dataroot
+    )
 
 total_steps = (start_epoch-1) * dataset_size + epoch_iter
 
@@ -46,10 +55,14 @@ for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
         epoch_iter = epoch_iter % dataset_size
 
     for i, data in enumerate(dataset):
+        if data is None:
+            print('[train] Skipping empty batch at index %d' % i)
+            continue
         
         iter_start_time = time.time()
-        total_steps += opt.batchSize
-        epoch_iter += opt.batchSize
+        current_batch_size = data['voxel'].size(0)
+        total_steps += current_batch_size
+        epoch_iter += current_batch_size
 
 
         save_fake = total_steps % opt.display_freq == display_delta
@@ -73,7 +86,7 @@ for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
         # print(total_steps, opt.print_freq, print_delta)
         if total_steps % opt.print_freq == print_delta:
             errors = {k: v.data.item() if not isinstance(v, int) else v for k, v in losses_dict.items()}
-            t = (time.time() - iter_start_time) / opt.batchSize
+            t = (time.time() - iter_start_time) / max(current_batch_size, 1)
             visualizer.print_current_errors(epoch, epoch_iter, errors, t)
             visualizer.plot_current_errors(errors, total_steps)
             visualizer.plot_current_weights(PRSNet, total_steps)

@@ -17,6 +17,8 @@ class CustomDatasetDataLoader(BaseDataLoader):
     
     def my_collate(self, batch):
         batch = list(filter(lambda x:x is not None, batch))
+        if not batch:
+            return None
         return torch.utils.data.dataloader.default_collate(batch)
 
     def initialize(self, opt):

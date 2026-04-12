@@ -1,0 +1,10 @@
+# Minimal Python packages for train/test on a modern Linux or Colab runtime.
+# Colab usually already provides torch; this line keeps local venv setup explicit.
+torch>=1.7
+numpy<2
+scipy>=1.6
+torchsummary==1.5.1
+tensorboard>=2.4
+
+# Optional only if you pass --tf_log to train.py:
+# tensorflow>=2.4
