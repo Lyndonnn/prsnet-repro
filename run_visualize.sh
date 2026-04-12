@@ -19,6 +19,12 @@ RENDER_MODE="${RENDER_MODE:-points}"
 SPLIT_PLANES="${SPLIT_PLANES:-0}"
 SHOW_REFLECTION="${SHOW_REFLECTION:-0}"
 MAX_POINTS="${MAX_POINTS:-1000}"
+PAPER_STYLE="${PAPER_STYLE:-0}"
+PLANE_IDS="${PLANE_IDS:-all}"
+POINT_SIZE="${POINT_SIZE:-5}"
+POINT_ALPHA="${POINT_ALPHA:-0.7}"
+VIEW_ELEV="${VIEW_ELEV:-22}"
+VIEW_AZIM="${VIEW_AZIM:-38}"
 export MPLCONFIGDIR="${MPLCONFIGDIR:-/tmp/matplotlib}"
 
 args=(
@@ -36,6 +42,11 @@ args=(
   --zoom "$ZOOM"
   --render-mode "$RENDER_MODE"
   --max-points "$MAX_POINTS"
+  --plane-ids "$PLANE_IDS"
+  --point-size "$POINT_SIZE"
+  --point-alpha "$POINT_ALPHA"
+  --view-elev "$VIEW_ELEV"
+  --view-azim "$VIEW_AZIM"
 )
 
 if [[ -n "$OUTPUT_DIR" ]]; then
@@ -52,6 +63,10 @@ fi
 
 if [[ "$SHOW_REFLECTION" == "1" || "$SHOW_REFLECTION" == "true" ]]; then
   args+=(--show-reflection)
+fi
+
+if [[ "$PAPER_STYLE" == "1" || "$PAPER_STYLE" == "true" ]]; then
+  args+=(--paper-style)
 fi
 
 echo "[run_visualize] ${args[*]} $*"

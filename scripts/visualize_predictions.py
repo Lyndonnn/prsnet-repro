@@ -131,22 +131,46 @@ def draw_points(ax, points, color="#2f2f2f", alpha=0.75, size=4, label=None):
     ax.scatter(points[:, 0], points[:, 1], points[:, 2], s=size, c=color, alpha=alpha, depthshade=False, label=label)
 
 
-def draw_plane(ax, plane, vertices, color, plane_scale, plane_alpha, label):
+def draw_plane(ax, plane, vertices, color, plane_scale, plane_alpha, label, show_normal=True, show_label=True):
     xs, ys, zs = plane_grid(plane, vertices, plane_scale)
     ax.plot_surface(xs, ys, zs, color=color, alpha=plane_alpha, linewidth=0, shade=False)
     normal = plane[:3] / np.linalg.norm(plane[:3])
     d = plane[3] / np.linalg.norm(plane[:3])
     center = -d * normal
     extent = np.ptp(vertices, axis=0).max()
-    ax.quiver(center[0], center[1], center[2], normal[0], normal[1], normal[2],
-              length=max(float(extent) * 0.18, 0.08), color=color, normalize=True)
-    ax.text(center[0], center[1], center[2], label, color=color)
+    if show_normal:
+        ax.quiver(center[0], center[1], center[2], normal[0], normal[1], normal[2],
+                  length=max(float(extent) * 0.18, 0.08), color=color, normalize=True)
+    if show_label:
+        ax.text(center[0], center[1], center[2], label, color=color)
+
+
+def select_planes(planes, plane_ids):
+    if not plane_ids or plane_ids == "all":
+        return planes
+    wanted = set(part.strip() for part in plane_ids.split(",") if part.strip())
+    selected = [(key, plane) for key, plane in planes if key in wanted]
+    if not selected:
+        raise ValueError("No requested planes found. requested=%s available=%s" %
+                         (plane_ids, ",".join(key for key, _ in planes)))
+    return selected
+
+
+def apply_paper_style(ax, vertices, zoom, elev, azim):
+    set_axes_equal(ax, vertices, zoom)
+    ax.view_init(elev=elev, azim=azim)
+    ax.set_proj_type("ortho")
+    ax.set_axis_off()
+    ax.grid(False)
+    ax.set_facecolor("white")
 
 
 def visualize_one(input_mat, prediction_mat, output_png, max_faces=5000, dpi=180,
                   plane_scale=0.35, plane_alpha=0.18, mesh_alpha=0.9,
                   mesh_edges=False, zoom=1.15, render_mode="points",
-                  split_planes=False, show_reflection=False, max_points=1000):
+                  split_planes=False, show_reflection=False, max_points=1000,
+                  paper_style=False, plane_ids="all", point_size=5,
+                  point_alpha=0.7, view_elev=22, view_azim=38):
     source = load_mat(input_mat)
     prediction = load_mat(prediction_mat)
 
@@ -163,6 +187,7 @@ def visualize_one(input_mat, prediction_mat, output_png, max_faces=5000, dpi=180
     planes = load_planes(prediction)
     if not planes:
         raise ValueError("%s has no plane0/plane1/... prediction keys" % prediction_mat)
+    planes = select_planes(planes, plane_ids)
 
     sample_points = load_sample_points(source, prediction, max_points)
 
@@ -172,16 +197,20 @@ def visualize_one(input_mat, prediction_mat, output_png, max_faces=5000, dpi=180
     if render_mode in ("mesh", "both"):
         draw_mesh(ax, vertices, faces, mesh_alpha, mesh_edges)
     if render_mode in ("points", "both") and sample_points is not None:
-        draw_points(ax, sample_points, color="#202020", alpha=0.7, size=5, label="surface samples")
+        draw_points(ax, sample_points, color="#202020", alpha=point_alpha, size=point_size, label="surface samples")
 
     for idx, (key, plane) in enumerate(planes):
         color = PLANE_COLORS[idx % len(PLANE_COLORS)]
-        draw_plane(ax, plane, vertices, color, plane_scale, plane_alpha, key)
+        draw_plane(ax, plane, vertices, color, plane_scale, plane_alpha, key,
+                   show_normal=not paper_style, show_label=not paper_style)
 
-    style_axis(ax, vertices, zoom, "%s\n%s" % (Path(input_mat).name, Path(prediction_mat).name))
+    if paper_style:
+        apply_paper_style(ax, vertices, zoom, view_elev, view_azim)
+    else:
+        style_axis(ax, vertices, zoom, "%s\n%s" % (Path(input_mat).name, Path(prediction_mat).name))
     output_png.parent.mkdir(parents=True, exist_ok=True)
     fig.tight_layout()
-    fig.savefig(output_png, dpi=dpi)
+    fig.savefig(output_png, dpi=dpi, bbox_inches="tight", pad_inches=0.02)
     plt.close(fig)
     print("[visualize_predictions] wrote %s" % output_png)
 
@@ -194,15 +223,20 @@ def visualize_one(input_mat, prediction_mat, output_png, max_faces=5000, dpi=180
             if render_mode in ("mesh", "both"):
                 draw_mesh(ax, vertices, faces, mesh_alpha, mesh_edges)
             if sample_points is not None:
-                draw_points(ax, sample_points, color="#222222", alpha=0.65, size=5, label="original")
+                draw_points(ax, sample_points, color="#222222", alpha=point_alpha, size=point_size, label="original")
                 if show_reflection:
                     reflected = reflect_points(sample_points, plane)
-                    draw_points(ax, reflected, color=color, alpha=0.45, size=5, label="reflected")
-                    ax.legend(loc="upper right")
-            draw_plane(ax, plane, vertices, color, plane_scale, min(plane_alpha + 0.08, 0.35), key)
-            style_axis(ax, vertices, zoom, "%s %s" % (Path(input_mat).stem, key))
+                    draw_points(ax, reflected, color=color, alpha=0.45, size=point_size, label="reflected")
+                    if not paper_style:
+                        ax.legend(loc="upper right")
+            draw_plane(ax, plane, vertices, color, plane_scale, min(plane_alpha + 0.08, 0.35), key,
+                       show_normal=not paper_style, show_label=not paper_style)
+            if paper_style:
+                apply_paper_style(ax, vertices, zoom, view_elev, view_azim)
+            else:
+                style_axis(ax, vertices, zoom, "%s %s" % (Path(input_mat).stem, key))
             fig.tight_layout()
-            fig.savefig(split_png, dpi=dpi)
+            fig.savefig(split_png, dpi=dpi, bbox_inches="tight", pad_inches=0.02)
             plt.close(fig)
             print("[visualize_predictions] wrote %s" % split_png)
 
@@ -239,6 +273,13 @@ def main():
     parser.add_argument("--show-reflection", action="store_true",
                         help="In split-plane images, draw reflected surface samples for visual symmetry checking.")
     parser.add_argument("--max-points", type=int, default=1000, help="Surface sample points to draw. 0 means all.")
+    parser.add_argument("--paper-style", action="store_true",
+                        help="Hide axes/title, use orthographic projection, and suppress labels/normals.")
+    parser.add_argument("--plane-ids", default="all", help="Comma-separated plane ids to draw, e.g. plane0 or plane0,plane2.")
+    parser.add_argument("--point-size", type=float, default=5, help="Surface point marker size.")
+    parser.add_argument("--point-alpha", type=float, default=0.7, help="Surface point opacity.")
+    parser.add_argument("--view-elev", type=float, default=22, help="Matplotlib 3D view elevation.")
+    parser.add_argument("--view-azim", type=float, default=38, help="Matplotlib 3D view azimuth.")
     args = parser.parse_args()
 
     if args.input_mat or args.prediction_mat or args.output:
@@ -247,7 +288,9 @@ def main():
         visualize_one(Path(args.input_mat), Path(args.prediction_mat), Path(args.output),
                       args.max_faces, args.dpi, args.plane_scale, args.plane_alpha,
                       args.mesh_alpha, args.mesh_edges, args.zoom, args.render_mode,
-                      args.split_planes, args.show_reflection, args.max_points)
+                      args.split_planes, args.show_reflection, args.max_points,
+                      args.paper_style, args.plane_ids, args.point_size,
+                      args.point_alpha, args.view_elev, args.view_azim)
         return
 
     prediction_dir, prediction_files = iter_prediction_files(args.results_dir, args.exp_name, args.phase, args.which_epoch)
@@ -266,7 +309,9 @@ def main():
         visualize_one(input_mat, prediction_mat, output_png,
                       args.max_faces, args.dpi, args.plane_scale, args.plane_alpha,
                       args.mesh_alpha, args.mesh_edges, args.zoom, args.render_mode,
-                      args.split_planes, args.show_reflection, args.max_points)
+                      args.split_planes, args.show_reflection, args.max_points,
+                      args.paper_style, args.plane_ids, args.point_size,
+                      args.point_alpha, args.view_elev, args.view_azim)
 
     print("[visualize_predictions] visualized %d prediction files" % len(prediction_files))
 

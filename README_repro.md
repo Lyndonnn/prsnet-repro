@@ -213,6 +213,27 @@ ZOOM=1.05 \
 bash run_visualize.sh
 ```
 
+For paper-style figures, hide axes and draw one selected plane:
+
+```bash
+DATAROOT=datasets/shapenet \
+EXP_NAME=airplane_101train_22test \
+RESULTS_DIR=results \
+MAX_FILES=5 \
+OUTPUT_DIR=results/airplane_101train_22test/test_latest/figures_paper \
+RENDER_MODE=points \
+PAPER_STYLE=1 \
+PLANE_IDS=plane0 \
+PLANE_SCALE=0.28 \
+PLANE_ALPHA=0.22 \
+POINT_SIZE=9 \
+POINT_ALPHA=0.95 \
+ZOOM=1.0 \
+VIEW_ELEV=18 \
+VIEW_AZIM=125 \
+bash run_visualize.sh
+```
+
 Run a controlled tiny subset:
 
 ```bash
