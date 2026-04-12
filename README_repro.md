@@ -190,6 +190,9 @@ DATAROOT=datasets/shapenet \
 EXP_NAME=airplane_101train_22test \
 RESULTS_DIR=results \
 MAX_FILES=22 \
+PLANE_SCALE=0.35 \
+PLANE_ALPHA=0.18 \
+MESH_ALPHA=0.9 \
 bash run_visualize.sh
 ```
 

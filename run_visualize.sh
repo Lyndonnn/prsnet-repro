@@ -10,6 +10,11 @@ WHICH_EPOCH="${WHICH_EPOCH:-latest}"
 MAX_FILES="${MAX_FILES:-0}"
 MAX_FACES="${MAX_FACES:-5000}"
 OUTPUT_DIR="${OUTPUT_DIR:-}"
+PLANE_SCALE="${PLANE_SCALE:-0.35}"
+PLANE_ALPHA="${PLANE_ALPHA:-0.18}"
+MESH_ALPHA="${MESH_ALPHA:-0.9}"
+MESH_EDGES="${MESH_EDGES:-0}"
+ZOOM="${ZOOM:-1.15}"
 export MPLCONFIGDIR="${MPLCONFIGDIR:-/tmp/matplotlib}"
 
 args=(
@@ -21,10 +26,18 @@ args=(
   --which-epoch "$WHICH_EPOCH"
   --max-files "$MAX_FILES"
   --max-faces "$MAX_FACES"
+  --plane-scale "$PLANE_SCALE"
+  --plane-alpha "$PLANE_ALPHA"
+  --mesh-alpha "$MESH_ALPHA"
+  --zoom "$ZOOM"
 )
 
 if [[ -n "$OUTPUT_DIR" ]]; then
   args+=(--output-dir "$OUTPUT_DIR")
+fi
+
+if [[ "$MESH_EDGES" == "1" || "$MESH_EDGES" == "true" ]]; then
+  args+=(--mesh-edges)
 fi
 
 echo "[run_visualize] ${args[*]} $*"

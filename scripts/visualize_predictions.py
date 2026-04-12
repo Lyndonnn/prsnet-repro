@@ -44,7 +44,7 @@ def load_planes(prediction):
     return planes
 
 
-def plane_grid(plane, vertices):
+def plane_grid(plane, vertices, scale):
     normal = plane[:3].astype(np.float64)
     d = float(plane[3])
     normal_norm = np.linalg.norm(normal)
@@ -62,25 +62,27 @@ def plane_grid(plane, vertices):
 
     extent = np.ptp(vertices, axis=0).max()
     extent = max(float(extent), 1.0)
-    radius = extent * 0.75
+    radius = extent * scale
     coords = np.linspace(-radius, radius, 2)
     uu, vv = np.meshgrid(coords, coords)
     grid = center[None, None, :] + uu[:, :, None] * u + vv[:, :, None] * v
     return grid[:, :, 0], grid[:, :, 1], grid[:, :, 2]
 
 
-def set_axes_equal(ax, vertices):
+def set_axes_equal(ax, vertices, zoom):
     mins = vertices.min(axis=0)
     maxs = vertices.max(axis=0)
     center = (mins + maxs) / 2.0
-    radius = max((maxs - mins).max() / 2.0, 0.5)
+    radius = max((maxs - mins).max() / 2.0 * zoom, 0.15)
     ax.set_xlim(center[0] - radius, center[0] + radius)
     ax.set_ylim(center[1] - radius, center[1] + radius)
     ax.set_zlim(center[2] - radius, center[2] + radius)
     ax.set_box_aspect([1, 1, 1])
 
 
-def visualize_one(input_mat, prediction_mat, output_png, max_faces=5000, dpi=180):
+def visualize_one(input_mat, prediction_mat, output_png, max_faces=5000, dpi=180,
+                  plane_scale=0.35, plane_alpha=0.18, mesh_alpha=0.9,
+                  mesh_edges=False, zoom=1.15):
     source = load_mat(input_mat)
     prediction = load_mat(prediction_mat)
 
@@ -101,28 +103,30 @@ def visualize_one(input_mat, prediction_mat, output_png, max_faces=5000, dpi=180
     fig = plt.figure(figsize=(8, 8))
     ax = fig.add_subplot(111, projection="3d")
 
-    mesh = Poly3DCollection(vertices[faces], alpha=0.28, linewidths=0.1)
-    mesh.set_facecolor("#b8b8b8")
-    mesh.set_edgecolor("#777777")
+    mesh = Poly3DCollection(vertices[faces], alpha=mesh_alpha, linewidths=0.05 if mesh_edges else 0.0)
+    mesh.set_facecolor("#8f8f8f")
+    mesh.set_edgecolor("#4d4d4d" if mesh_edges else "#8f8f8f")
     ax.add_collection3d(mesh)
 
     for idx, (key, plane) in enumerate(planes):
-        xs, ys, zs = plane_grid(plane, vertices)
+        xs, ys, zs = plane_grid(plane, vertices, plane_scale)
         color = PLANE_COLORS[idx % len(PLANE_COLORS)]
-        ax.plot_surface(xs, ys, zs, color=color, alpha=0.34, linewidth=0, shade=False)
+        ax.plot_surface(xs, ys, zs, color=color, alpha=plane_alpha, linewidth=0, shade=False)
         normal = plane[:3] / np.linalg.norm(plane[:3])
         d = plane[3] / np.linalg.norm(plane[:3])
         center = -d * normal
+        extent = np.ptp(vertices, axis=0).max()
         ax.quiver(center[0], center[1], center[2], normal[0], normal[1], normal[2],
-                  length=0.18, color=color, normalize=True)
+                  length=max(float(extent) * 0.18, 0.08), color=color, normalize=True)
         ax.text(center[0], center[1], center[2], key, color=color)
 
     ax.set_title("%s\n%s" % (Path(input_mat).name, Path(prediction_mat).name))
     ax.set_xlabel("x")
     ax.set_ylabel("y")
     ax.set_zlabel("z")
-    set_axes_equal(ax, vertices)
+    set_axes_equal(ax, vertices, zoom)
     ax.view_init(elev=22, azim=38)
+    ax.grid(False)
     output_png.parent.mkdir(parents=True, exist_ok=True)
     fig.tight_layout()
     fig.savefig(output_png, dpi=dpi)
@@ -151,12 +155,19 @@ def main():
     parser.add_argument("--max-files", type=int, default=0, help="Limit batch visualization count. 0 means all.")
     parser.add_argument("--max-faces", type=int, default=5000, help="Mesh faces to draw per object. 0 means all.")
     parser.add_argument("--dpi", type=int, default=180, help="PNG resolution.")
+    parser.add_argument("--plane-scale", type=float, default=0.35, help="Plane half-size as a multiple of object extent.")
+    parser.add_argument("--plane-alpha", type=float, default=0.18, help="Plane transparency.")
+    parser.add_argument("--mesh-alpha", type=float, default=0.9, help="Mesh opacity.")
+    parser.add_argument("--mesh-edges", action="store_true", help="Draw mesh triangle edges.")
+    parser.add_argument("--zoom", type=float, default=1.15, help="Axis range multiplier around the object.")
     args = parser.parse_args()
 
     if args.input_mat or args.prediction_mat or args.output:
         if not (args.input_mat and args.prediction_mat and args.output):
             raise SystemExit("--input-mat, --prediction-mat, and --output must be provided together")
-        visualize_one(Path(args.input_mat), Path(args.prediction_mat), Path(args.output), args.max_faces, args.dpi)
+        visualize_one(Path(args.input_mat), Path(args.prediction_mat), Path(args.output),
+                      args.max_faces, args.dpi, args.plane_scale, args.plane_alpha,
+                      args.mesh_alpha, args.mesh_edges, args.zoom)
         return
 
     prediction_dir, prediction_files = iter_prediction_files(args.results_dir, args.exp_name, args.phase, args.which_epoch)
@@ -172,7 +183,9 @@ def main():
             input_mat = prediction_mat
             print("[visualize_predictions] source .mat missing; using prediction mesh: %s" % prediction_mat)
         output_png = output_dir / ("%s_planes.png" % prediction_mat.stem)
-        visualize_one(input_mat, prediction_mat, output_png, args.max_faces, args.dpi)
+        visualize_one(input_mat, prediction_mat, output_png,
+                      args.max_faces, args.dpi, args.plane_scale, args.plane_alpha,
+                      args.mesh_alpha, args.mesh_edges, args.zoom)
 
     print("[visualize_predictions] visualized %d prediction files" % len(prediction_files))
 
