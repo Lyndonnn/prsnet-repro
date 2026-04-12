@@ -234,6 +234,17 @@ VIEW_AZIM=125 \
 bash run_visualize.sh
 ```
 
+Evaluate approximate SDE and a PCA baseline:
+
+```bash
+DATAROOT=datasets/shapenet \
+EXP_NAME=airplane_101train_22test \
+RESULTS_DIR=results \
+MAX_FILES=22 \
+INCLUDE_PCA=1 \
+bash run_evaluate_sde.sh
+```
+
 Run a controlled tiny subset:
 
 ```bash
