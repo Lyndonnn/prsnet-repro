@@ -49,3 +49,60 @@ also contains one.
 This evaluates the planes predicted by `test.py`. It is not the paper's
 official 1000-shape GT-plane benchmark unless you also reproduce the official
 `evaluation.zip` inputs (`1000.txt`, `objs/`, and `gt_planes.mat`).
+
+## Official 1000-Shape Benchmark Path
+
+If `evaluation.zip` has been unpacked into `evaluation_old/`, first build the
+missing OBJ folder and a PRS-Net test dataset in the same coordinate system as
+`gt_planes.mat`. This is intentionally identity-oriented, not randomly rotated.
+
+```matlab
+cd('D:\code\prsnet-repro')
+addpath(genpath('D:\tools\gptoolbox'))
+run_official_eval_preprocess('E:\ShapeNetCore.v2\ShapeNetCore.v2')
+```
+
+Then copy or zip `datasets/shapenet_official_eval1000` to the training machine
+and run inference with the checkpoint you want to audit:
+
+```bash
+DATAROOT=datasets/shapenet_official_eval1000 \
+EXP_NAME=multi21_50train_10test_aug4 \
+GPU_IDS=0 \
+WHICH_EPOCH=200 \
+MAX_DATASET_SIZE=999999 \
+bash run_test.sh
+```
+
+Bring the result folder back next to the repo on Windows if needed, then run:
+
+```matlab
+cd('D:\code\prsnet-repro')
+addpath(genpath('D:\tools\gptoolbox'))
+addpath(fullfile(pwd, 'evaluation_old'))
+addpath(fullfile(pwd, 'evaluation'))
+
+evaluate_official_benchmark( ...
+    fullfile(pwd, '1000.txt'), ...
+    fullfile(pwd, 'evaluation_old', 'gt_planes.mat'), ...
+    fullfile(pwd, 'results', 'multi21_50train_10test_aug4', 'test_200'), ...
+    fullfile(pwd, 'evaluation_old', 'objs'), ...
+    fullfile(pwd, 'results', 'multi21_50train_10test_aug4', 'test_200', 'official_metrics.csv'), ...
+    fullfile(pwd, 'results', 'multi21_50train_10test_aug4', 'test_200', 'official_summary.csv'), ...
+    0.0004, ...
+    pi / 6, ...
+    true)
+```
+
+The evaluator writes rows for:
+
+```text
+gt
+prsnet_raw
+prsnet_filtered
+pca
+```
+
+`prsnet_filtered` applies the inference-stage checks described in later PRS-Net
+comparisons: remove duplicate planes with dihedral angle below `pi / 6`, keeping
+the lower-SDE plane, then drop planes whose SDE is above `0.0004`.
