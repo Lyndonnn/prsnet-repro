@@ -1,11 +1,11 @@
-function [] = evaluate_official_benchmark(benchmark_txt, gt_planes_path, prediction_dir, obj_dir, output_csv, summary_csv, sde_threshold, duplicate_angle_threshold, include_pca)
+function [] = evaluate_official_benchmark(benchmark_txt, gt_planes_path, prediction_dir, obj_dir, output_csv, summary_csv, sde_threshold, duplicate_angle_threshold, include_pca, prediction_method_name)
 %EVALUATE_OFFICIAL_BENCHMARK Evaluate PRS-Net predictions on the official 1000 IDs.
 %
 % This script uses evaluation_old/gt_planes.mat and evaluation_old/objs.
 % It reports:
 %   - gt: SDE of the provided ground-truth planes, a sanity lower bound
-%   - prsnet_raw: all plane* outputs from test.py
-%   - prsnet_filtered: PRS-Net outputs after duplicate and SDE-threshold filtering
+%   - <method>_raw: all plane* outputs from test.py or an exported predictor
+%   - <method>_filtered: outputs after duplicate and SDE-threshold filtering
 %   - pca: three PCA baseline planes from the sampled mesh points
 %
 % Example from repo root on Windows MATLAB:
@@ -21,7 +21,8 @@ function [] = evaluate_official_benchmark(benchmark_txt, gt_planes_path, predict
 %       fullfile(pwd, 'results', 'my_exp', 'test_200', 'official_summary.csv'), ...
 %       0.0004, ...
 %       pi / 6, ...
-%       true)
+%       true, ...
+%       'prsnet')
 
     this_dir = fileparts(mfilename('fullpath'));
     repo_root = fileparts(this_dir);
@@ -56,6 +57,11 @@ function [] = evaluate_official_benchmark(benchmark_txt, gt_planes_path, predict
     if nargin < 9 || isempty(include_pca)
         include_pca = true;
     end
+    if nargin < 10 || isempty(prediction_method_name)
+        prediction_method_name = 'prsnet';
+    end
+    raw_method = [prediction_method_name, '_raw'];
+    filtered_method = [prediction_method_name, '_filtered'];
 
     if exist('point_mesh_squared_distance', 'file') ~= 3 && exist('point_mesh_squared_distance', 'file') ~= 2
         error('point_mesh_squared_distance is not on the MATLAB path.');
@@ -87,7 +93,7 @@ function [] = evaluate_official_benchmark(benchmark_txt, gt_planes_path, predict
     cleanup = onCleanup(@() fclose(metrics_fid));
     fprintf(metrics_fid, 'shape_index,shape_id,method,plane_id,kept,sde_exact,best_gt_plane_dist,matched_at_0p2,a,b,c,d,prediction_mat,obj_path\n');
 
-    methods = {'gt', 'prsnet_raw', 'prsnet_filtered', 'pca'};
+    methods = {'gt', raw_method, filtered_method, 'pca'};
     method_planes = struct();
     method_sdes = struct();
     for m = 1:length(methods)
@@ -123,17 +129,17 @@ function [] = evaluate_official_benchmark(benchmark_txt, gt_planes_path, predict
         if exist(pred_path, 'file')
             [raw_planes, raw_names] = loadPredictionPlanes(pred_path);
             raw_sdes = evaluatePlaneSet(raw_planes, vertices, faces, sample);
-            method_planes.prsnet_raw{i} = raw_planes;
-            method_sdes.prsnet_raw{i} = raw_sdes;
-            writePlaneRows(metrics_fid, i, shape_id, 'prsnet_raw', raw_planes, raw_sdes, true(size(raw_sdes)), gt_planes, pred_path, obj_path, raw_names);
+            method_planes.(raw_method){i} = raw_planes;
+            method_sdes.(raw_method){i} = raw_sdes;
+            writePlaneRows(metrics_fid, i, shape_id, raw_method, raw_planes, raw_sdes, true(size(raw_sdes)), gt_planes, pred_path, obj_path, raw_names);
 
             keep = filterPredictionPlanes(raw_planes, raw_sdes, sde_threshold, duplicate_angle_threshold);
             filtered_planes = raw_planes(keep, :);
             filtered_sdes = raw_sdes(keep);
             filtered_names = raw_names(keep);
-            method_planes.prsnet_filtered{i} = filtered_planes;
-            method_sdes.prsnet_filtered{i} = filtered_sdes;
-            writePlaneRows(metrics_fid, i, shape_id, 'prsnet_filtered', filtered_planes, filtered_sdes, true(size(filtered_sdes)), gt_planes, pred_path, obj_path, filtered_names);
+            method_planes.(filtered_method){i} = filtered_planes;
+            method_sdes.(filtered_method){i} = filtered_sdes;
+            writePlaneRows(metrics_fid, i, shape_id, filtered_method, filtered_planes, filtered_sdes, true(size(filtered_sdes)), gt_planes, pred_path, obj_path, filtered_names);
         else
             warning('[evaluate_official_benchmark] Missing prediction: %s', pred_path);
         end

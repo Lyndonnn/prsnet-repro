@@ -106,3 +106,11 @@ pca
 `prsnet_filtered` applies the inference-stage checks described in later PRS-Net
 comparisons: remove duplicate planes with dihedral angle below `pi / 6`, keeping
 the lower-SDE plane, then drop planes whose SDE is above `0.0004`.
+
+The final optional argument can rename prediction methods. For example, passing
+`'e3sym'` writes rows as `e3sym_raw` and `e3sym_filtered` while using the same
+plane `.mat` format:
+
+```matlab
+evaluate_official_benchmark(..., true, 'e3sym')
+```

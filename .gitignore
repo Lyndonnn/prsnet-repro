@@ -10,6 +10,10 @@ venv/
 checkpoints/
 results/
 runs/
+results_e3sym/
+
+# External repos cloned by reproduction wrappers.
+external/
 
 # Generated or copied datasets. Keep only the placeholder directories in git.
 datasets/**/*.mat

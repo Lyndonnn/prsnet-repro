@@ -2,6 +2,11 @@
 
 This repo keeps the official PRS-Net training and testing code as the primary implementation. The added files are wrappers, dataset checks, path configurability, and smoke-test documentation.
 
+For a lightweight E3Sym comparison workflow, see `E3SYM_REPRO.md`. It keeps
+E3Sym in an ignored `external/e3sym/` clone, exports pretrained E3Sym
+predictions as PRS-Net-style `plane*.mat` files, and reuses the official
+benchmark evaluator.
+
 ## Concise Repo Diagnosis
 
 - Training entry point: `train.py`
