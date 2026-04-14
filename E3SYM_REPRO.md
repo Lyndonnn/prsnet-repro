@@ -33,7 +33,6 @@ Then from this repo:
 ```bash
 bash run_e3sym_test.sh
 python3 -m pip install easydict PyYAML tqdm scipy "numba>=0.59" "numpy<2.2"
-python3 -m pip install "git+https://github.com/facebookresearch/pytorch3d.git@stable"
 bash run_e3sym_test.sh
 ```
 
@@ -53,7 +52,9 @@ INSTALL_DEPS=legacy bash run_e3sym_test.sh
 ```
 
 E3Sym uses a CUDA extension for clustering. Running inference on a CPU-only
-machine is not supported by the upstream implementation.
+machine is not supported by the upstream implementation. The wrapper does not
+require PyTorch3D on modern Colab: it uses a small `ball_query` fallback and a
+pure Python OBJ sampler for pretrained inference.
 
 ## Pretrained Inference
 

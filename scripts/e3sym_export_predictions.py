@@ -57,6 +57,110 @@ def _normalise_plane(plane):
     return plane / n
 
 
+def _install_pytorch3d_fallback() -> None:
+    """Provide the small pytorch3d.ops.ball_query surface E3Sym needs.
+
+    Current Colab Python versions often cannot install PyTorch3D wheels. E3Sym
+    only imports ball_query during inference, so a nearest-neighbor fallback is
+    enough for this wrapper.
+    """
+
+    try:
+        import pytorch3d.ops  # noqa: F401
+        return
+    except Exception:
+        pass
+
+    import types
+    import torch
+
+    def ball_query(points, dense_points, K=64, radius=0.15, return_nn=True):
+        # points: [B, N, 3], dense_points: [B, M, 3]
+        b, n, _ = points.shape
+        m = dense_points.shape[1]
+        k = min(int(K), int(m))
+        dists = torch.cdist(points, dense_points)
+        top_dists, top_idx = torch.topk(dists, k=k, dim=-1, largest=False, sorted=False)
+
+        if k < K:
+            pad = K - k
+            top_idx = torch.cat([top_idx, top_idx[..., :1].expand(b, n, pad)], dim=-1)
+            top_dists = torch.cat([top_dists, top_dists[..., :1].expand(b, n, pad)], dim=-1)
+
+        invalid = top_dists > radius
+        if invalid.any():
+            top_idx = top_idx.clone()
+            top_dists = top_dists.clone()
+            top_idx[invalid] = top_idx[..., :1].expand_as(top_idx)[invalid]
+            top_dists[invalid] = -1
+
+        gather_idx = top_idx.unsqueeze(-1).expand(-1, -1, -1, 3)
+        nn_points = torch.gather(
+            dense_points.unsqueeze(1).expand(-1, n, -1, -1), 2, gather_idx
+        )
+        if return_nn:
+            return top_dists, top_idx, nn_points
+        return top_dists, top_idx
+
+    pytorch3d_module = types.ModuleType("pytorch3d")
+    ops_module = types.ModuleType("pytorch3d.ops")
+    ops_module.ball_query = ball_query
+    pytorch3d_module.ops = ops_module
+    sys.modules["pytorch3d"] = pytorch3d_module
+    sys.modules["pytorch3d.ops"] = ops_module
+
+
+def _load_obj_mesh(path: Path):
+    import numpy as np
+
+    vertices = []
+    faces = []
+    with path.open("r", encoding="utf-8", errors="ignore") as f:
+        for line in f:
+            if line.startswith("v "):
+                parts = line.strip().split()
+                if len(parts) >= 4:
+                    vertices.append([float(parts[1]), float(parts[2]), float(parts[3])])
+            elif line.startswith("f "):
+                raw = line.strip().split()[1:]
+                ids = []
+                for token in raw:
+                    vertex_id = token.split("/")[0]
+                    if vertex_id:
+                        ids.append(int(vertex_id) - 1)
+                if len(ids) >= 3:
+                    for i in range(1, len(ids) - 1):
+                        faces.append([ids[0], ids[i], ids[i + 1]])
+
+    if not vertices or not faces:
+        raise ValueError(f"Could not read mesh from {path}")
+    return np.asarray(vertices, dtype=np.float32), np.asarray(faces, dtype=np.int64)
+
+
+def _sample_mesh_points(path: Path, npoints: int):
+    import numpy as np
+    import torch
+
+    vertices, faces = _load_obj_mesh(path)
+    verts = torch.from_numpy(vertices)
+    tris = torch.from_numpy(faces)
+    tri_vertices = verts[tris]
+    v0 = tri_vertices[:, 0, :]
+    v1 = tri_vertices[:, 1, :]
+    v2 = tri_vertices[:, 2, :]
+    areas = 0.5 * torch.linalg.norm(torch.cross(v1 - v0, v2 - v0, dim=1), dim=1)
+    if float(areas.sum()) <= 0:
+        raise ValueError(f"Mesh has zero surface area: {path}")
+
+    face_ids = torch.multinomial(areas, npoints, replacement=True)
+    chosen = tri_vertices[face_ids]
+    uv = torch.rand(npoints, 2)
+    flip = uv.sum(dim=1) > 1
+    uv[flip] = 1 - uv[flip]
+    points = chosen[:, 0, :] + uv[:, :1] * (chosen[:, 1, :] - chosen[:, 0, :]) + uv[:, 1:] * (chosen[:, 2, :] - chosen[:, 0, :])
+    return points.float()
+
+
 class ObjEvalDataset:
     """Minimal E3Sym eval dataset.
 
@@ -85,25 +189,7 @@ class ObjEvalDataset:
         return len(self.paths)
 
     def __getitem__(self, index: int):
-        import torch
-        from pytorch3d.io import load_obj
-        from pytorch3d.ops import sample_farthest_points, sample_points_from_meshes
-        from pytorch3d.structures import Meshes
-
-        obj_path = self.paths[index]
-        verts, faces, _ = load_obj(str(obj_path), load_textures=False)
-        mesh = Meshes(verts=[verts], faces=[faces.verts_idx])
-        dense_count = max(10000, self.npoints * 4)
-        dense_points = sample_points_from_meshes(mesh, dense_count)[0].float()
-        if dense_points.shape[0] >= self.npoints:
-            points, _ = sample_farthest_points(
-                dense_points.unsqueeze(0), K=self.npoints, random_start_point=False
-            )
-            return points[0].float()
-
-        pad_count = self.npoints - dense_points.shape[0]
-        pad_indices = torch.randint(dense_points.shape[0], (pad_count,))
-        return torch.cat([dense_points, dense_points[pad_indices]], dim=0).float()
+        return _sample_mesh_points(self.paths[index], self.npoints)
 
 
 def parse_args() -> argparse.Namespace:
@@ -165,6 +251,7 @@ def main() -> None:
         import torch
         from scipy.io import savemat
 
+        _install_pytorch3d_fallback()
         from lib.model import SymmetryNet
         from torch.utils.data import DataLoader
 

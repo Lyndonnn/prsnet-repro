@@ -19,9 +19,6 @@ case "${INSTALL_DEPS:-0}" in
         echo "[run_e3sym_test] installing Colab-compatible E3Sym inference dependencies"
         python3 -m pip install -U pip setuptools wheel ninja
         python3 -m pip install easydict PyYAML tqdm scipy "numba>=0.59" "numpy<2.2"
-        if ! python3 -c "import pytorch3d" >/dev/null 2>&1; then
-            python3 -m pip install "git+https://github.com/facebookresearch/pytorch3d.git@stable"
-        fi
         ;;
     legacy)
         echo "[run_e3sym_test] installing upstream pinned E3Sym dependencies"
