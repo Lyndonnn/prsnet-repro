@@ -57,6 +57,55 @@ def _normalise_plane(plane):
     return plane / n
 
 
+class ObjEvalDataset:
+    """Minimal E3Sym eval dataset.
+
+    The upstream ShapeNetEval class depends on Open3D and writes PLY caches. For
+    this reproduction wrapper we only need deterministic point tensors from the
+    official OBJ files, so this keeps inference dependencies smaller.
+    """
+
+    def __init__(self, root: Path, npoints: int):
+        self.root = root
+        self.npoints = npoints
+        benchmark_txt = root.parent / "1000.txt"
+        self.datas: list[tuple[str, str]] = []
+        self.paths: list[Path] = []
+        with benchmark_txt.open("r", encoding="utf-8") as f:
+            for line in f:
+                parts = line.strip().split()
+                if len(parts) < 2:
+                    continue
+                shape_id, plane_num = parts[:2]
+                obj_path = root / f"{shape_id}.obj"
+                self.datas.append((shape_id, plane_num))
+                self.paths.append(obj_path)
+
+    def __len__(self) -> int:
+        return len(self.paths)
+
+    def __getitem__(self, index: int):
+        import torch
+        from pytorch3d.io import load_obj
+        from pytorch3d.ops import sample_farthest_points, sample_points_from_meshes
+        from pytorch3d.structures import Meshes
+
+        obj_path = self.paths[index]
+        verts, faces, _ = load_obj(str(obj_path), load_textures=False)
+        mesh = Meshes(verts=[verts], faces=[faces.verts_idx])
+        dense_count = max(10000, self.npoints * 4)
+        dense_points = sample_points_from_meshes(mesh, dense_count)[0].float()
+        if dense_points.shape[0] >= self.npoints:
+            points, _ = sample_farthest_points(
+                dense_points.unsqueeze(0), K=self.npoints, random_start_point=False
+            )
+            return points[0].float()
+
+        pad_count = self.npoints - dense_points.shape[0]
+        pad_indices = torch.randint(dense_points.shape[0], (pad_count,))
+        return torch.cat([dense_points, dense_points[pad_indices]], dim=0).float()
+
+
 def parse_args() -> argparse.Namespace:
     root = _repo_root()
     default_e3sym_root = root / "external" / "e3sym"
@@ -116,9 +165,8 @@ def main() -> None:
         import torch
         from scipy.io import savemat
 
-        from lib.dataset import ShapeNetEval
         from lib.model import SymmetryNet
-        from lib.util import DataLoaderX
+        from torch.utils.data import DataLoader
 
         if args.device == "cuda" and not torch.cuda.is_available():
             raise RuntimeError(
@@ -145,8 +193,8 @@ def main() -> None:
         model.eval()
 
         print(f"[e3sym_export] eval_root: {eval_root}")
-        dataset = ShapeNetEval(str(eval_root), npoints)
-        loader = DataLoaderX(dataset, batch_size=batch_size, num_workers=num_workers, shuffle=False)
+        dataset = ObjEvalDataset(eval_root, npoints)
+        loader = DataLoader(dataset, batch_size=batch_size, num_workers=num_workers, shuffle=False)
 
         rows = []
         preview = None

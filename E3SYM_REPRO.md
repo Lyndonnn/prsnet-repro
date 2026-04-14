@@ -32,14 +32,24 @@ Then from this repo:
 
 ```bash
 bash run_e3sym_test.sh
-python3 -m pip install -r external/e3sym/requirements.txt "scipy>=1.6"
+python3 -m pip install easydict PyYAML tqdm scipy "numba>=0.59" "numpy<2.2"
+python3 -m pip install "git+https://github.com/facebookresearch/pytorch3d.git@stable"
 bash run_e3sym_test.sh
 ```
 
-If you want the script to attempt dependency installation automatically:
+If you want the script to attempt dependency installation automatically on a
+modern Colab runtime:
 
 ```bash
 INSTALL_DEPS=1 bash run_e3sym_test.sh
+```
+
+Do not use the upstream pinned `requirements.txt` on current Colab Python. It
+contains `numba==0.56.4`, which does not support Python 3.11/3.12. If you are
+using the original Python 3.7 environment from the E3Sym README, use:
+
+```bash
+INSTALL_DEPS=legacy bash run_e3sym_test.sh
 ```
 
 E3Sym uses a CUDA extension for clustering. Running inference on a CPU-only

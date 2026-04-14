@@ -14,11 +14,26 @@ if [ ! -d "$E3SYM_ROOT/.git" ]; then
     git clone --depth 1 https://github.com/renwuli/e3sym.git "$E3SYM_ROOT"
 fi
 
-if [ "${INSTALL_DEPS:-0}" = "1" ]; then
-    echo "[run_e3sym_test] installing E3Sym dependencies"
-    python3 -m pip install -r "$E3SYM_ROOT/requirements.txt"
-    python3 -m pip install "scipy>=1.6"
-fi
+case "${INSTALL_DEPS:-0}" in
+    1|colab|modern)
+        echo "[run_e3sym_test] installing Colab-compatible E3Sym inference dependencies"
+        python3 -m pip install -U pip setuptools wheel ninja
+        python3 -m pip install easydict PyYAML tqdm scipy "numba>=0.59" "numpy<2.2"
+        if ! python3 -c "import pytorch3d" >/dev/null 2>&1; then
+            python3 -m pip install "git+https://github.com/facebookresearch/pytorch3d.git@stable"
+        fi
+        ;;
+    legacy)
+        echo "[run_e3sym_test] installing upstream pinned E3Sym dependencies"
+        python3 -m pip install -r "$E3SYM_ROOT/requirements.txt" "scipy>=1.6"
+        ;;
+    0|"")
+        ;;
+    *)
+        echo "[run_e3sym_test] unknown INSTALL_DEPS=$INSTALL_DEPS; use 0, 1, colab, modern, or legacy" >&2
+        exit 2
+        ;;
+esac
 
 mkdir -p "$E3SYM_ROOT/.tmp"
 export CUDA_VISIBLE_DEVICES="$GPU_IDS"
