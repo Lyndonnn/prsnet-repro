@@ -23,23 +23,28 @@ num_aug_per_model = 4;
 
 cd(fileparts(mfilename('fullpath')));
 
-entries = dir(shapenet_dir);
-names = {};
-for i = 1:length(entries)
-    name = entries(i).name;
-    if entries(i).isdir && ~strcmp(name, '.') && ~strcmp(name, '..')
-        train_split = fullfile(split_dir, [name, '_train.txt']);
-        test_split = fullfile(split_dir, [name, '_test.txt']);
-        if exist(train_split, 'file') && exist(test_split, 'file')
-            names{end + 1} = name; %#ok<AGROW>
-        else
-            fprintf('[run_multi21_aug_preprocess] skip %s because split files are missing\n', name);
-        end
+names = discover_categories(shapenet_dir, split_dir);
+
+% Some zip tools create E:\ShapeNetCore.v2\ShapeNetCore.v2\02691156\...
+% instead of E:\ShapeNetCore.v2\02691156\...
+if isempty(names)
+    nested_dir = fullfile(shapenet_dir, 'ShapeNetCore.v2');
+    if exist(nested_dir, 'dir')
+        fprintf('[run_multi21_aug_preprocess] no categories found at %s, trying nested root %s\n', ...
+            shapenet_dir, nested_dir);
+        shapenet_dir = nested_dir;
+        names = discover_categories(shapenet_dir, split_dir);
     end
 end
 
 names = sort(names);
 categories = names(1:min(max_categories, length(names)));
+
+if isempty(categories)
+    error(['[run_multi21_aug_preprocess] No ShapeNet category folders were found under %s. ', ...
+           'Expected paths like <root>\\02747177\\<shape_id>\\models\\model_normalized.obj. ', ...
+           'Set shapenet_dir to the folder that directly contains category folders.'], shapenet_dir);
+end
 
 fprintf('[run_multi21_aug_preprocess] ShapeNet root: %s\n', shapenet_dir);
 fprintf('[run_multi21_aug_preprocess] Output root: %s\n', output_dir);
@@ -55,3 +60,20 @@ precomputeShapeData( ...
     train_limit_per_category, ...
     test_limit_per_category, ...
     num_aug_per_model)
+
+function names = discover_categories(root_dir, split_dir)
+    entries = dir(root_dir);
+    names = {};
+    for i = 1:length(entries)
+        name = entries(i).name;
+        if entries(i).isdir && ~strcmp(name, '.') && ~strcmp(name, '..')
+            train_split = fullfile(split_dir, [name, '_train.txt']);
+            test_split = fullfile(split_dir, [name, '_test.txt']);
+            if exist(train_split, 'file') && exist(test_split, 'file')
+                names{end + 1} = name; %#ok<AGROW>
+            else
+                fprintf('[run_multi21_aug_preprocess] skip %s because split files are missing\n', name);
+            end
+        end
+    end
+end
