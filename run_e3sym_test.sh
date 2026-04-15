@@ -49,6 +49,9 @@ fi
 if [ -n "${E3SYM_EVAL_ROOT:-}" ]; then
     cmd+=(--eval-root "$E3SYM_EVAL_ROOT")
 fi
+if [ -n "${E3SYM_BENCHMARK_TXT:-}" ]; then
+    cmd+=(--benchmark-txt "$E3SYM_BENCHMARK_TXT")
+fi
 if [ -n "${E3SYM_WEIGHTS:-}" ]; then
     cmd+=(--weights "$E3SYM_WEIGHTS")
 fi

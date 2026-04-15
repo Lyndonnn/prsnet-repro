@@ -74,6 +74,21 @@ OUTPUT_DIR=results_e3sym/official/test_pretrained \
 bash run_e3sym_test.sh
 ```
 
+To run E3Sym on the same 545 OBJ subset used by the PRS-Net official-subset
+evaluation, point `E3SYM_EVAL_ROOT` at that OBJ directory and keep the repo-root
+`1000.txt` as the benchmark order:
+
+```bash
+E3SYM_EVAL_ROOT=/content/prsnet-repro/evaluation_old/objs \
+E3SYM_BENCHMARK_TXT=/content/prsnet-repro/1000.txt \
+OUTPUT_DIR=/content/prsnet-repro/results_e3sym/official545/test_pretrained \
+NUM_WORKERS=0 \
+bash run_e3sym_test.sh
+```
+
+The exporter skips benchmark IDs whose OBJ file is missing, so this writes one
+prediction `.mat` per available OBJ.
+
 Output:
 
 ```text

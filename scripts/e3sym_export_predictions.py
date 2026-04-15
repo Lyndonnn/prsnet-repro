@@ -169,10 +169,10 @@ class ObjEvalDataset:
     official OBJ files, so this keeps inference dependencies smaller.
     """
 
-    def __init__(self, root: Path, npoints: int):
+    def __init__(self, root: Path, npoints: int, benchmark_txt: Path | None = None, skip_missing: bool = True):
         self.root = root
         self.npoints = npoints
-        benchmark_txt = root.parent / "1000.txt"
+        benchmark_txt = benchmark_txt or (root.parent / "1000.txt")
         self.datas: list[tuple[str, str]] = []
         self.paths: list[Path] = []
         with benchmark_txt.open("r", encoding="utf-8") as f:
@@ -182,6 +182,8 @@ class ObjEvalDataset:
                     continue
                 shape_id, plane_num = parts[:2]
                 obj_path = root / f"{shape_id}.obj"
+                if skip_missing and not obj_path.exists():
+                    continue
                 self.datas.append((shape_id, plane_num))
                 self.paths.append(obj_path)
 
@@ -201,6 +203,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--e3sym-root", type=Path, default=default_e3sym_root)
     parser.add_argument("--config", type=Path, default=None)
     parser.add_argument("--eval-root", type=Path, default=None)
+    parser.add_argument("--benchmark-txt", type=Path, default=None)
     parser.add_argument("--weights", type=Path, default=None)
     parser.add_argument(
         "--output-dir",
@@ -211,6 +214,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--num-workers", type=int, default=None)
     parser.add_argument("--npoints", type=int, default=None)
     parser.add_argument("--max-shapes", type=int, default=0)
+    parser.add_argument("--no-skip-missing", action="store_true")
     parser.add_argument("--device", default="cuda")
     return parser.parse_args()
 
@@ -232,6 +236,11 @@ def main() -> None:
     weights = (args.weights or Path(config["weights"])).expanduser()
     if not weights.is_absolute():
         weights = e3sym_root / weights
+    benchmark_txt = args.benchmark_txt
+    if benchmark_txt is not None:
+        benchmark_txt = benchmark_txt.expanduser()
+        if not benchmark_txt.is_absolute():
+            benchmark_txt = _repo_root() / benchmark_txt
 
     output_dir = args.output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -280,7 +289,15 @@ def main() -> None:
         model.eval()
 
         print(f"[e3sym_export] eval_root: {eval_root}")
-        dataset = ObjEvalDataset(eval_root, npoints)
+        if benchmark_txt is not None:
+            print(f"[e3sym_export] benchmark_txt: {benchmark_txt}")
+        dataset = ObjEvalDataset(
+            eval_root,
+            npoints,
+            benchmark_txt=benchmark_txt,
+            skip_missing=not args.no_skip_missing,
+        )
+        print(f"[e3sym_export] shapes with OBJ: {len(dataset)}")
         loader = DataLoader(dataset, batch_size=batch_size, num_workers=num_workers, shuffle=False)
 
         rows = []
