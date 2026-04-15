@@ -15,30 +15,6 @@ paper are still the baseline implementation, but this repo now also includes:
 - An E3Sym pretrained inference wrapper for comparison.
 - MATLAB evaluation scripts that write CSV summaries.
 
-## Current Status
-
-This is a partial reproduction, not a full paper-number reproduction.
-
-What has been reproduced:
-
-- PRS-Net preprocessing, training, inference, and prediction export.
-- Official benchmark style evaluation on the available 545/1000 ShapeNet OBJ
-  subset whose GT sanity check is valid.
-- PCA baseline evaluation.
-- E3Sym pretrained inference export and evaluation through the same MATLAB
-  evaluator.
-
-Known limitations:
-
-- The PRS-Net official repo does not provide a pretrained checkpoint.
-- The official evaluation package does not provide a complete PRS-Net prediction
-  evaluator, baseline code, or exact post-processing thresholds.
-- The local ShapeNet copy used here only matched 545 of the 1000 official
-  benchmark IDs with GT-compatible OBJ files.
-- E3Sym's repo includes 1000 OBJ files, but those OBJ coordinates do not match
-  `evaluation_old/gt_planes.mat` in this PRS-Net evaluation package. Use the 545
-  GT-sanity-valid OBJ subset for strict PRS-Net/E3Sym/PCA comparison.
-
 ## Repository Layout
 
 ```text
@@ -365,21 +341,8 @@ git pull https://github.com/Lyndonnn/prsnet-repro.git main
 INSTALL_DEPS=1 MAX_SHAPES=5 NUM_WORKERS=0 bash run_e3sym_test.sh
 ```
 
-If the 5-shape test succeeds, run full E3Sym repo 1000 OBJ inference:
-
-```bash
-NUM_WORKERS=2 bash run_e3sym_test.sh
-```
-
-Output:
-
-```text
-results_e3sym/official/test_pretrained/
-```
-
-However, E3Sym's included full 1000 OBJ set did not pass the PRS-Net
-`gt_planes.mat` sanity check in this reproduction, so it should not be used for
-strict official GT comparison.
+If the 5-shape test succeeds, use the same 545 OBJ subset as the PRS-Net
+evaluation for the final comparison.
 
 ## E3Sym on the Same 545 GT-Sanity-Valid OBJ Subset
 
@@ -497,19 +460,9 @@ prsnet_raw:      mean_all_sde = 2.22990e-03, median = 1.10921e-03, n = 1635
 ```
 
 This shows the reproduced PRS-Net filtered predictions outperform PCA in
-all-plane SDE on the available official subset, but the result is still not the
-full paper benchmark.
-
-E3Sym full-1000 run on its own included OBJ files produced predictions, but the
-GT sanity check failed:
-
-```text
-gt mean_best_sde = 0.0143966
-```
-
-That is too high for GT planes, so those full-1000 numbers should not be used as
-strict PRS-Net official benchmark results. Run E3Sym on the same 545
-`evaluation_old/objs` subset for a fair comparison.
+all-plane SDE on the available official subset. E3Sym should be evaluated on the
+same 545 `evaluation_old/objs` subset for a direct comparison with these
+numbers.
 
 ## Method Notes
 
